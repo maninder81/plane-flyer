@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>3D Plane Flying Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1026; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  #ui {
+    position: fixed; top: 16px; left: 16px; color: #dfe7ff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6); pointer-events: none; z-index: 10;
+  }
+  #ui h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+  #ui p { font-size: 13px; opacity: .8; margin-top: 6px; line-height: 1.5; }
+  #hud {
+    position: fixed; bottom: 16px; left: 16px; color: #9fe0ff;
+    font-size: 13px; font-variant-numeric: tabular-nums; z-index: 10;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  }
+  kbd {
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 4px; padding: 1px 6px; font-size: 12px;
+  }
+  #speedctl {
+    position: fixed; bottom: 40px; left: 16px; z-index: 10;
+    color: #9fe0ff; font-size: 13px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #speedInput {
+    width: 84px; padding: 3px 6px; font-size: 13px;
+    background: rgba(10,18,40,.7); color: #eaf4ff;
+    border: 1px solid rgba(120,180,255,.45); border-radius: 5px;
+    font-variant-numeric: tabular-nums;
+  }
+  #speedSet, #speedMax {
+    padding: 3px 10px; font-size: 12px; cursor: pointer;
+    background: rgba(80,140,255,.25); color: #eaf4ff;
+    border: 1px solid rgba(120,180,255,.45); border-radius: 5px;
+  }
+  #speedSet:hover, #speedMax:hover { background: rgba(80,140,255,.45); }
+  #speedMax { background: rgba(255,120,90,.25); border-color: rgba(255,150,110,.5); }
+  #speedMax:hover { background: rgba(255,120,90,.5); }
+
+  /* ---- menus / overlays ---- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 25%, rgba(24,36,72,.82), rgba(5,9,22,.94));
+  }
+  .panel {
+    background: rgba(12,20,42,.94); border: 1px solid rgba(120,180,255,.3);
+    border-radius: 14px; padding: 26px 30px; max-width: 760px; width: 92%;
+    max-height: 88vh; overflow-y: auto;
+    color: #eaf2ff; box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+  .panel h1 { font-size: 26px; margin-bottom: 2px; }
+  .panel h2 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: #9fc4ff; letter-spacing: .5px; text-transform: uppercase; }
+  .panel p.sub { font-size: 13px; opacity: .7; }
+  .btnrow { display: flex; gap: 10px; flex-wrap: wrap; }
+  .gbtn {
+    flex: 1; min-width: 130px; padding: 12px 14px; cursor: pointer; text-align: left;
+    background: rgba(80,140,255,.16); color: #eaf2ff;
+    border: 1px solid rgba(120,180,255,.4); border-radius: 10px; font-size: 14px;
+    transition: background .15s; font-family: inherit;
+  }
+  .gbtn:hover { background: rgba(80,140,255,.4); }
+  .gbtn b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .gbtn span { font-size: 12px; opacity: .7; }
+  .gbtn.play { background: rgba(90,210,140,.2); border-color: rgba(120,230,160,.5); }
+  .gbtn.play:hover { background: rgba(90,210,140,.42); }
+  .lb { margin-top: 6px; font-size: 13px; }
+  .lbgrid { display: flex; gap: 16px; flex-wrap: wrap; }
+  .lbcol { flex: 1; min-width: 180px; }
+  .lbcol > b { color: #9fc4ff; font-size: 13px; }
+  .lb table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .lb th, .lb td { text-align: left; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .lb th { color: #9fc4ff; font-weight: 600; }
+  .lb td.t { color: #ffe08a; font-variant-numeric: tabular-nums; }
+  .small { font-size: 12px; opacity: .7; }
+  #mazehud {
+    position: fixed; top: 16px; right: 18px; z-index: 12; text-align: right;
+    color: #ffe08a; font-size: 14px; font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 4px rgba(0,0,0,.8);
+  }
+  #mazehud .t { font-size: 30px; font-weight: 700; line-height: 1.1; }
+  #mazehud .hint { color: #cfe6ff; font-size: 11px; opacity: .75; margin-top: 4px; }
+  #finish input {
+    padding: 6px 9px; border-radius: 6px; border: 1px solid rgba(120,180,255,.4);
+    background: rgba(8,14,30,.8); color: #eaf2ff; font-size: 14px; width: 150px; font-family: inherit;
+  }
+  /* ---- story mode HUD ---- */
+  #storyhud {
+    position: fixed; top: 16px; left: 16px; z-index: 12;
+    color: #eaf4ff; font-size: 13px; line-height: 1.55;
+    font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,0,0,.85);
+    background: rgba(8,12,28,.45); padding: 10px 13px; border-radius: 10px;
+    border: 1px solid rgba(120,180,255,.18); min-width: 196px;
+  }
+  #storyhud #shPhase { font-size: 18px; font-weight: 700; }
+  #storyhud #shDay { opacity: .85; }
+  #storyhud #shSupply { opacity: .8; font-size: 12px; margin-bottom: 4px; }
+  #storyhud #shHP { color: #ff7a7a; font-weight: 700; }
+  #storyhud #shFuel { color: #ffd24a; font-weight: 700; }
+  #storyhud #shWeap { color: #cfe6ff; }
+  #storyhud #shZ { color: #9bd67a; }
+  #storyhud .keys { margin-top: 7px; font-size: 11px; opacity: .6; max-width: 220px; }
+  #toast {
+    position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
+    z-index: 30; background: rgba(10,18,40,.88); color: #eaf4ff;
+    padding: 8px 16px; border-radius: 20px; font-size: 14px;
+    border: 1px solid rgba(120,180,255,.3); transition: opacity .4s; pointer-events: none;
+  }
+  #minimapWrap { position: fixed; top: 14px; right: 14px; z-index: 13; text-align: center; }
+  #minimapWrap .mmtitle { color: #ff9a9a; font-size: 11px; letter-spacing: 1.5px; margin-bottom: 3px; text-shadow: 0 1px 3px #000; }
+  #minimap { border-radius: 50%; border: 2px solid rgba(120,180,255,.35); box-shadow: 0 4px 16px rgba(0,0,0,.55); display: block; }
+  #mmLegend { margin-top: 4px; font-size: 10px; color: #cfe0ff; opacity: .8; text-shadow: 0 1px 3px #000; }
+  /* ---- aiming crosshair ---- */
+  #crosshair { position: fixed; top: 50%; left: 50%; width: 44px; height: 44px; transform: translate(-50%,-50%); z-index: 14; pointer-events: none; }
+  #crosshair .ring { position: absolute; inset: 0; border: 2px solid rgba(255,255,255,.55); border-radius: 50%; }
+  #crosshair .dot { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; border-radius: 50%; }
+  #crosshair .t { position: absolute; background: rgba(255,255,255,.65); }
+  #crosshair .t.v { width: 2px; height: 11px; left: 50%; margin-left: -1px; }
+  #crosshair .t.h { height: 2px; width: 11px; top: 50%; margin-top: -1px; }
+  #crosshair .t.up { top: -13px; } #crosshair .t.dn { bottom: -13px; }
+  #crosshair .t.lf { left: -13px; } #crosshair .t.rt { right: -13px; }
+  #crosshair.lock .ring { border-color: #ff5040; box-shadow: 0 0 9px rgba(255,80,64,.85); }
+  #crosshair.lock .dot { background: #ff5040; }
+  #crosshair.lock .t { background: rgba(255,80,64,.9); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ===== LOBBY ===== -->
+<div id="lobby" class="overlay">
+  <div class="panel">
+    <h1>✈ Flight Game</h1>
+    <p class="sub">Choose a mode</p>
+
+    <h2>Free flight</h2>
+    <div class="btnrow">
+      <button class="gbtn play" id="btnPractice">
+        <b>Practice Mode</b><span>Fly freely around the world — no timer, no limits</span>
+      </button>
+    </div>
+
+    <h2>Maze — weave the mountains to the finish line, fast as you can</h2>
+    <div class="btnrow" id="mazeLevels"></div>
+
+    <h2>Story — survive the zombie apocalypse</h2>
+    <div class="btnrow">
+      <button class="gbtn play" id="btnStory">
+        <b>Story Mode</b><span>Fly by day · drive &amp; fight zombies by night</span>
+      </button>
+    </div>
+
+    <h2>Leaderboards</h2>
+    <div class="lb"><div class="lbgrid" id="lobbyLb"></div></div>
+  </div>
+</div>
+
+<!-- ===== MAZE HUD ===== -->
+<div id="mazehud" class="hidden">
+  <div class="t"><span id="mzTime">0.00</span>s</div>
+  <div>finish in <span id="mzGate">—</span></div>
+  <div class="hint">weave the mountains · cross the green finish line · Esc = lobby</div>
+</div>
+
+<!-- ===== STORY HUD ===== -->
+<div id="storyhud" class="hidden">
+  <div id="shPhase">☀ MORNING 6:00</div>
+  <div id="shDay">Day 1</div>
+  <div id="shSupply">Supplies in 5:00</div>
+  <div>❤ HP <span id="shHP">100</span></div>
+  <div>⛽ FUEL <span id="shFuel">100</span></div>
+  <div id="shVeh">Plane (immune)</div>
+  <div id="shWeap">WEAPON — · AMMO 0</div>
+  <div id="shMat">🪵 Materials 0 · House: none</div>
+  <div id="shZ">zombies 0</div>
+  <div class="keys">1 plane · 2 car · 3 moto · 4 foot &nbsp;|&nbsp; W/S drive · A/D steer · Space shoot · B build house · Esc lobby</div>
+</div>
+<div id="toast" class="hidden"></div>
+
+<!-- ===== ZOMBIE RADAR (minimap) ===== -->
+<div id="minimapWrap" class="hidden">
+  <div class="mmtitle">🧟 ZOMBIE RADAR</div>
+  <canvas id="minimap" width="208" height="208"></canvas>
+  <div id="mmLegend">bright red = horde · 🟢 fuel · 🟡 weapon · 🟦 wood · 🏠 home</div>
+</div>
+
+<!-- ===== AIMING CROSSHAIR ===== -->
+<div id="crosshair" class="hidden">
+  <div class="ring"></div><div class="dot"></div>
+  <div class="t v up"></div><div class="t v dn"></div><div class="t h lf"></div><div class="t h rt"></div>
+</div>
+
+<!-- ===== GAME OVER ===== -->
+<div id="gameover" class="overlay hidden">
+  <div class="panel">
+    <h1 id="goTitle">You were overrun.</h1>
+    <p class="sub" id="goSub"></p>
+    <div class="btnrow" style="margin-top:18px;">
+      <button class="gbtn play" id="btnGoRetry"><b>Retry</b></button>
+      <button class="gbtn" id="btnGoLobby"><b>Lobby</b></button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FINISH ===== -->
+<div id="finish" class="overlay hidden">
+  <div class="panel">
+    <h1 id="fnTitle">Course complete!</h1>
+    <p class="sub" id="fnTime"></p>
+    <div id="fnNew" class="small" style="margin-top:6px;color:#ffe08a;"></div>
+    <div style="margin:14px 0; display:flex; gap:8px; align-items:center;">
+      <input id="fnName" maxlength="14" placeholder="Your name" />
+      <button class="gbtn" style="flex:0 0 auto" id="fnSave">Save score</button>
+    </div>
+    <div class="lb" id="fnLb"></div>
+    <div class="btnrow" style="margin-top:18px;">
+      <button class="gbtn" id="fnRetry"><b>Retry</b></button>
+      <button class="gbtn" id="fnNext"><b>Next level</b></button>
+      <button class="gbtn" id="fnLobby"><b>Lobby</b></button>
+    </div>
+  </div>
+</div>
+
+<div id="ui">
+  <h1>✈ 3D Plane Flying Game</h1>
+  <p>
+    <kbd>W</kbd>/<kbd>S</kbd> pitch &nbsp; <kbd>A</kbd>/<kbd>D</kbd> yaw &nbsp;
+    <kbd>Q</kbd>/<kbd>E</kbd> roll<br/>
+    <kbd>↑</kbd>/<kbd>↓</kbd> throttle &nbsp; <kbd>V</kbd> toggle cockpit / chase view
+  </p>
+</div>
+<div id="speedctl">
+  <label for="speedInput">Set speed:</label>
+  <input id="speedInput" type="number" min="40" max="100000" step="500" placeholder="0–100000" />
+  <button id="speedSet">Go</button>
+  <button id="speedMax">Max</button>
+</div>
+<div id="hud">SPEED <span id="speed">0</span> &nbsp;|&nbsp; ALT <span id="alt">0</span></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0b1026, 0.000018);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 2, 250000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic tone mapping = richer look
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+// soft image-based lighting for nicer materials & reflections
+try {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+} catch (e) { console.warn('env map unavailable', e); }
+
+// ---- Lighting (intensity/colour driven by updateSky for day/night) ----
+const amb = new THREE.AmbientLight(0x6677aa, 0.6);
+scene.add(amb);
+const hemi = new THREE.HemisphereLight(0xbcd9f5, 0x46402f, 0.8);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2d8, 2.4);
+sun.position.set(0.5, 1.0, 0.4).multiplyScalar(120000);
+scene.add(sun);
+
+// ---- Starfield (shown at night) ----
+const starGeo = new THREE.BufferGeometry();
+const starCount = 2600;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const r = 120000 + Math.random() * 55000;
+  const t = Math.random() * Math.PI * 2;
+  const p = Math.acos(2 * Math.random() - 1);
+  starPos[i*3]   = r * Math.sin(p) * Math.cos(t);
+  starPos[i*3+1] = r * Math.sin(p) * Math.sin(t);
+  starPos[i*3+2] = r * Math.cos(p);
+}
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0 }));
+stars.renderOrder = -9; scene.add(stars);
+
+// ---- Gradient sky dome (day/night) ----
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: {
+    top:    { value: new THREE.Color(0x2a6cd0) },
+    bottom: { value: new THREE.Color(0xb6d4ee) },
+    up:     { value: new THREE.Vector3(0, 1, 0) },
+  },
+  vertexShader: 'varying vec3 vp; void main(){ vp = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 bottom; uniform vec3 up; varying vec3 vp; void main(){ float h = clamp(dot(normalize(vp), up)*0.5+0.5, 0.0, 1.0); gl_FragColor = vec4(mix(bottom, top, pow(h, 0.55)), 1.0); }',
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(180000, 32, 16), skyMat);
+sky.renderOrder = -10; sky.frustumCulled = false;
+scene.add(sky);
+
+const DAY_TOP = new THREE.Color(0x2a6cd0), DAY_BOT = new THREE.Color(0xb6d4ee);
+const NIGHT_TOP = new THREE.Color(0x04060f), NIGHT_BOT = new THREE.Color(0x121a33);
+const SUN_DAY = new THREE.Color(0xfff2d8), SUN_NIGHT = new THREE.Color(0x6c7fb0);
+const _skyTop = new THREE.Color(), _skyBot = new THREE.Color(), _skyUp = new THREE.Vector3();
+let dayFactor = 1;
+function updateSky(dt){
+  const target = (typeof storyActive !== 'undefined' && storyActive && phase === 'night') ? 0 : 1;
+  dayFactor += (target - dayFactor) * Math.min(1, dt * 0.7);
+  const f = dayFactor;
+  _skyTop.copy(NIGHT_TOP).lerp(DAY_TOP, f); _skyBot.copy(NIGHT_BOT).lerp(DAY_BOT, f);
+  skyMat.uniforms.top.value.copy(_skyTop);
+  skyMat.uniforms.bottom.value.copy(_skyBot);
+  scene.fog.color.copy(_skyBot);
+  sun.intensity = 0.35 + 2.3 * f;
+  sun.color.copy(SUN_NIGHT).lerp(SUN_DAY, f);
+  amb.intensity = 0.28 + 0.5 * f;
+  hemi.intensity = 0.25 + 0.7 * f;
+  stars.material.opacity = Math.pow(1 - f, 1.5);
+  stars.visible = f < 0.98;
+  _skyUp.copy(plane.position).normalize();
+  skyMat.uniforms.up.value.copy(_skyUp);
+  sky.position.copy(camera.position);
+}
+
+// ---- The living planet ----
+// Huge radius so the horizon is almost flat — you experience the surface as
+// rolling ground with the occasional hill, mountain and valley, not a ball.
+const R = 60000;                            // base sea-level radius
+const WATER = -180;                         // elevation of lakes/valleys water
+const PLANET_CENTER = new THREE.Vector3(0, 0, 0);
+const planetGroup = new THREE.Group();
+scene.add(planetGroup);
+
+// random unit vector on the sphere
+function randDir() {
+  const u = Math.random(), v = Math.random();
+  const t = 2 * Math.PI * u, p = Math.acos(2 * v - 1);
+  return new THREE.Vector3(Math.sin(p) * Math.cos(t), Math.cos(p), Math.sin(p) * Math.sin(t));
+}
+
+// ---- Procedural terrain heightfield ----
+function smoothstep(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+function hash3(x, y, z) {
+  const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+function valueNoise(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  const c000 = hash3(xi, yi, zi),       c100 = hash3(xi + 1, yi, zi);
+  const c010 = hash3(xi, yi + 1, zi),   c110 = hash3(xi + 1, yi + 1, zi);
+  const c001 = hash3(xi, yi, zi + 1),   c101 = hash3(xi + 1, yi, zi + 1);
+  const c011 = hash3(xi, yi + 1, zi + 1), c111 = hash3(xi + 1, yi + 1, zi + 1);
+  return lerp(
+    lerp(lerp(c000, c100, u), lerp(c010, c110, u), v),
+    lerp(lerp(c001, c101, u), lerp(c011, c111, u), v), w);
+}
+function fbm(x, y, z, oct) {
+  let f = 1, a = 0.5, sum = 0, norm = 0;
+  for (let i = 0; i < oct; i++) { sum += a * valueNoise(x * f, y * f, z * f); norm += a; f *= 2.0; a *= 0.5; }
+  return sum / norm; // 0..1
+}
+
+// elevation(dir): height in world units above base R. Negative = valley/lake bed.
+function elevation(d) {
+  const base = fbm(d.x * 1.6, d.y * 1.6, d.z * 1.6, 5);          // broad rolling terrain
+  const hills = (base - 0.45) * 2600;                            // valleys (-) to highlands (+)
+  const mtnMask = smoothstep(0.60, 0.80, base);                 // mountains only in highlands
+  const mtn = Math.pow(fbm(d.x * 5 + 9, d.y * 5 + 9, d.z * 5 + 9, 5), 1.5) * 6500 * mtnMask;
+  const detail = (fbm(d.x * 18, d.y * 18, d.z * 18, 3) - 0.5) * 220;
+  return hills + mtn + detail;
+}
+// radius of the ground surface in a given direction (water flattened into lakes)
+function groundRadius(d) { return R + Math.max(elevation(d), WATER); }
+
+const UP = new THREE.Vector3(0, 1, 0);
+
+// ---- Build the displaced, colored terrain mesh ----
+const planetGeo = new THREE.SphereGeometry(R, 400, 400);
+{
+  const deep    = new THREE.Color(0x123a86);
+  const lake    = new THREE.Color(0x2f86e0);
+  const sand    = new THREE.Color(0xd8c890);
+  const grass   = new THREE.Color(0x4aa84e);
+  const grassDry= new THREE.Color(0x8f9a3e);
+  const forest  = new THREE.Color(0x236a2f);
+  const rock    = new THREE.Color(0x7d7163);
+  const rockDk  = new THREE.Color(0x574e44);
+  const snow    = new THREE.Color(0xf4f6fb);
+  const pos = planetGeo.attributes.position;
+  const colors = [];
+  const n = new THREE.Vector3();
+  const tang = new THREE.Vector3();
+  const sampleDir = new THREE.Vector3();
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    n.fromBufferAttribute(pos, i).normalize();
+    const e = elevation(n);
+    // displace the vertex along its normal (water flattened into lakes)
+    const radius = R + Math.max(e, WATER);
+    pos.setXYZ(i, n.x * radius, n.y * radius, n.z * radius);
+
+    // slope estimate — sample the height a short step away along a tangent
+    tang.set(-n.y, n.x, 0); if (tang.lengthSq() < 1e-5) tang.set(0, -n.z, n.y);
+    tang.normalize();
+    sampleDir.copy(n).addScaledVector(tang, 0.0012).normalize();
+    const slope = Math.min(1, Math.abs(elevation(sampleDir) - e) / (0.0012 * R));
+
+    // patchy noise so land isn't a flat color
+    const patch  = valueNoise(n.x * 13 + 5, n.y * 13 + 5, n.z * 13 + 5);   // meadow vs dry
+    const forNz  = valueNoise(n.x * 7 + 20, n.y * 7 + 20, n.z * 7 + 20);   // forest patches
+    const fine   = valueNoise(n.x * 80, n.y * 80, n.z * 80);               // fine speckle
+
+    if (e < WATER - 160) {
+      c.copy(deep);
+    } else if (e < WATER + 10) {
+      c.copy(deep).lerp(lake, smoothstep(WATER - 160, WATER + 10, e));     // depth shading
+    } else if (e < 70) {
+      c.copy(sand);
+    } else {
+      c.copy(grass).lerp(grassDry, smoothstep(0.45, 0.78, patch) * 0.6);   // dry meadows
+      c.lerp(forest, smoothstep(0.5, 0.82, forNz));                        // forest patches
+      c.lerp(rock,   smoothstep(1500, 3000, e));                           // higher = rocky
+      c.lerp(rockDk, smoothstep(2800, 4200, e) * 0.6);
+      c.lerp(rockDk, smoothstep(0.45, 0.9, slope) * 0.85);                 // steep cliffs
+      c.lerp(snow,   smoothstep(3800, 4700, e) * (1 - slope * 0.85));      // snow on gentle peaks
+    }
+    // fine mottling so the surface looks textured rather than plastic
+    c.offsetHSL(0, (patch - 0.5) * 0.05, (fine - 0.5) * 0.10);
+    colors.push(c.r, c.g, c.b);
+  }
+  planetGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  planetGeo.computeVertexNormals();
+}
+const planet = new THREE.Mesh(
+  planetGeo,
+  new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0.0, flatShading: false })
+);
+planetGroup.add(planet);
+
+// atmosphere glow
+const atmosphere = new THREE.Mesh(
+  new THREE.SphereGeometry(R + 2200, 64, 64),
+  new THREE.MeshBasicMaterial({ color: 0x7fc0ff, transparent: true, opacity: 0.12, side: THREE.BackSide })
+);
+planetGroup.add(atmosphere);
+
+// ---- Rivers: meander downhill-ish, laid onto the terrain surface ----
+const riverMat = new THREE.MeshStandardMaterial({ color: 0x46b6ff, emissive: 0x0e3a66, emissiveIntensity: 0.6, roughness: 0.3 });
+for (let r = 0; r < 16; r++) {
+  // start somewhere on green land
+  let start, tries = 0;
+  do { start = randDir(); tries++; } while ((elevation(start) < 200 || elevation(start) > 1600) && tries < 120);
+  const cur = start.clone();
+  let tangent = new THREE.Vector3().crossVectors(cur, randDir()).normalize();
+  const pts = [];
+  for (let i = 0; i < 80; i++) {
+    pts.push(cur.clone().multiplyScalar(groundRadius(cur) + 25));
+    const axis = new THREE.Vector3().crossVectors(cur, tangent).normalize();
+    cur.applyAxisAngle(axis, 0.004).normalize();             // step forward along surface
+    tangent.applyAxisAngle(cur, (Math.random() - 0.5) * 0.6).normalize(); // meander
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 140, 60, 8, false), riverMat);
+  planetGroup.add(tube);
+}
+
+// ---- Trees: instanced, sitting on the terrain, with collision data ----
+const treeColliders = [];   // { x,y,z, r } spheres the plane must not enter
+{
+  const trunkGeo = new THREE.CylinderGeometry(2.2, 3.4, 22, 5);
+  const leafGeo  = new THREE.ConeGeometry(14, 42, 7);
+  trunkGeo.translate(0, 11, 0);    // base sits at the surface
+  leafGeo.translate(0, 42, 0);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 1 });
+  const leafMat  = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+
+  const MAX = 2000;
+  const placements = [];
+  let attempts = 0;
+  while (placements.length < MAX && attempts < MAX * 30) {
+    attempts++;
+    const dir = randDir();
+    const e = elevation(dir);
+    if (e < 120 || e > 2200) continue;   // grow on green land, not water or high peaks
+    placements.push({ dir, s: 0.9 + Math.random() * 1.6 });
+  }
+
+  const count = placements.length;
+  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
+  const leafInst  = new THREE.InstancedMesh(leafGeo, leafMat, count);
+  const dummy = new THREE.Object3D();
+  const q = new THREE.Quaternion();
+  const col = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    const { dir, s } = placements[i];
+    const gr = groundRadius(dir);
+    q.setFromUnitVectors(UP, dir);
+    dummy.position.copy(dir).multiplyScalar(gr);
+    dummy.quaternion.copy(q);
+    dummy.scale.setScalar(s);
+    dummy.updateMatrix();
+    trunkInst.setMatrixAt(i, dummy.matrix);
+    leafInst.setMatrixAt(i, dummy.matrix);
+    col.setHSL(0.33, 0.55, 0.26 + Math.random() * 0.12);
+    leafInst.setColorAt(i, col);
+    // collision sphere around the canopy
+    const c = dir.clone().multiplyScalar(gr + 42 * s);
+    treeColliders.push({ x: c.x, y: c.y, z: c.z, r: 18 * s });
+  }
+  trunkInst.instanceMatrix.needsUpdate = true;
+  leafInst.instanceMatrix.needsUpdate = true;
+  leafInst.instanceColor.needsUpdate = true;
+  planetGroup.add(trunkInst, leafInst);
+}
+
+// ---- The player rig: one Group, swappable bodies (plane / car / moto / foot) ----
+const plane = new THREE.Group();
+
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8eef7, roughness: 0.4, metalness: 0.3 });
+const accentMat = new THREE.MeshStandardMaterial({ color: 0xff5544, roughness: 0.5, metalness: 0.2 });
+
+// --- plane body ---
+const planeBody = new THREE.Group();
+{
+  const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 7, 16), bodyMat);
+  fuselage.rotation.x = Math.PI / 2; planeBody.add(fuselage);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.8, 16), accentMat);
+  nose.rotation.x = -Math.PI / 2; nose.position.z = 4.2; planeBody.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(11, 0.25, 1.8), bodyMat);
+  wing.position.z = 0.3; planeBody.add(wing);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 1), bodyMat);
+  tail.position.set(0, 0, -3.2); planeBody.add(tail);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.6, 1.2), accentMat);
+  fin.position.set(0, 0.8, -3.2); planeBody.add(fin);
+}
+plane.add(planeBody);
+
+// --- car body --- (nose along +Z = forward)
+const carBody = new THREE.Group();
+{
+  const paint = new THREE.MeshStandardMaterial({ color: 0x3a7bd5, roughness: 0.5, metalness: 0.3 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x16324f, roughness: 0.2, metalness: 0.5 });
+  const tire  = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.9 });
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.9, 5.2), paint); chassis.position.y = 0.95; carBody.add(chassis);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.85, 2.6), glass); cabin.position.set(0, 1.65, -0.2); carBody.add(cabin);
+  const wheelGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.5, 12);
+  for (const [wx, wz] of [[1.35,1.6],[-1.35,1.6],[1.35,-1.6],[-1.35,-1.6]]) {
+    const w = new THREE.Mesh(wheelGeo, tire); w.rotation.z = Math.PI/2; w.position.set(wx, 0.6, wz); carBody.add(w);
+  }
+  carBody.visible = false;
+}
+plane.add(carBody);
+
+// --- motorcycle body ---
+const motoBody = new THREE.Group();
+{
+  const paint = new THREE.MeshStandardMaterial({ color: 0xd23b2f, roughness: 0.5, metalness: 0.3 });
+  const seatM = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+  const tire  = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.9 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 3.2), paint); frame.position.y = 1.05; motoBody.add(frame);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 1.3), seatM); seat.position.set(0, 1.45, -0.6); motoBody.add(seat);
+  const wheelGeo = new THREE.CylinderGeometry(0.95, 0.95, 0.4, 14);
+  for (const wz of [1.55, -1.55]) { const w = new THREE.Mesh(wheelGeo, tire); w.rotation.z = Math.PI/2; w.position.set(0, 0.85, wz); motoBody.add(w); }
+  motoBody.visible = false;
+}
+plane.add(motoBody);
+
+// --- on-foot survivor ---
+const footBody = new THREE.Group();
+{
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x356b4a, roughness: 1 });
+  const skin  = new THREE.MeshStandardMaterial({ color: 0xe0a070, roughness: 1 });
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.1, 4, 8), cloth); torso.position.y = 1.3; footBody.add(torso);
+  const head  = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 10), skin); head.position.y = 2.3; footBody.add(head);
+  footBody.visible = false;
+}
+plane.add(footBody);
+
+plane.scale.setScalar(8);           // bigger rig to match the huge world
+plane.position.copy(UP).multiplyScalar(groundRadius(UP) + 1400); // start high above the ground
+scene.add(plane);
+
+// ---- Controls / physics ----
+const keys = {};
+let firstPerson = false;  // start in third-person chase view (press V for cockpit)
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
+  if (e.code === 'KeyV') firstPerson = !firstPerson;
+  if (e.code === 'Escape' && mode) showLobby();
+  if (e.code === 'Space') keys['fire'] = true;
+  if (storyActive) {
+    if (e.code === 'Digit1') trySwitchVehicle('plane');
+    else if (e.code === 'Digit2') trySwitchVehicle('car');
+    else if (e.code === 'Digit3') trySwitchVehicle('moto');
+    else if (e.code === 'Digit4') trySwitchVehicle('foot');
+    else if (e.code === 'KeyB') buildHouse();
+  }
+});
+addEventListener('keyup',   e => { keys[e.code] = false; if (e.code === 'Space') keys['fire'] = false; });
+
+let speed = 1.4;
+const minSpeed = 0.4, maxSpeed = 1000.0;   // HUD shows speed×100 → up to 100,000
+let gravVel = 0;            // downward speed from gravity (toward planet)
+const GRAVITY = 10;        // pull strength toward the planet
+
+const speedEl = document.getElementById('speed');
+const altEl = document.getElementById('alt');
+
+// ---- Speed textbox: type a preferred speed (still works alongside ↑/↓ throttle) ----
+const speedInput = document.getElementById('speedInput');
+const speedSet = document.getElementById('speedSet');
+function applySpeedInput() {
+  const v = parseFloat(speedInput.value);
+  if (!isNaN(v)) speed = Math.max(minSpeed, Math.min(maxSpeed, v / 100)); // HUD shows speed×100
+  speedInput.blur();   // hand focus back to the game
+}
+speedSet.addEventListener('click', applySpeedInput);
+document.getElementById('speedMax').addEventListener('click', () => {
+  speed = maxSpeed;
+  speedInput.value = (maxSpeed * 100).toFixed(0);
+  speedInput.blur();
+});
+// while typing in the box, don't let keystrokes drive the plane
+speedInput.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') applySpeedInput(); });
+speedInput.addEventListener('keyup', e => e.stopPropagation());
+
+// quaternion-based rotation for proper 3D flight
+function applyRotation(axis, angle) {
+  const q = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+  plane.quaternion.multiply(q);
+}
+
+const camOffset = new THREE.Vector3(0, 28, -128); // behind & above (scaled for big plane)
+const tmp = new THREE.Vector3();
+const tmp2 = new THREE.Vector3();
+const stepStart = new THREE.Vector3();
+const toPlaneV = new THREE.Vector3();
+const upDirV = new THREE.Vector3();
+const framePrev = new THREE.Vector3();
+const clock = new THREE.Clock();
+
+// ====================== LOBBY / MODES / MAZE / LEADERBOARD ======================
+let mode = null;            // null = lobby, 'practice', or 'maze'
+let paused = true;          // when true, flight controls/physics are frozen
+let mtnObstacles = [];      // course mountains (collision cones)
+let finishData = null;      // { center, dir, lateral, halfWidth }
+let currentLevel = 0;
+let mazeRunning = false;
+let mazeStart = 0;
+let lastTime = 0;
+let lastName = '';
+let saved = false;
+let lastGround = R;
+const gateGroup = new THREE.Group();
+scene.add(gateGroup);
+
+const LEVELS = [
+  { name: 'Foothill Dash',  desc: 'Weave a few hills to the line', count: 6,  step: 0.050, zigAmp: 1600, mtnH: 2600, mtnR: 1300, meander: 0.30, eMin: -400, eMax: 800  },
+  { name: 'Ridge Run',      desc: 'Slalom the ridges',             count: 9,  step: 0.045, zigAmp: 2300, mtnH: 4200, mtnR: 1600, meander: 0.40, eMin:  300, eMax: 1800 },
+  { name: 'Summit Slalom',  desc: 'Thread the towering peaks',     count: 12, step: 0.040, zigAmp: 3000, mtnH: 6200, mtnR: 1900, meander: 0.55, eMin: 1500, eMax: 6500 },
+];
+
+const $ = id => document.getElementById(id);
+const lobbyEl = $('lobby'), finishEl = $('finish'), mazehudEl = $('mazehud');
+const hudEl = $('hud'), speedctlEl = $('speedctl');
+const mzGate = $('mzGate'), mzTime = $('mzTime');
+const fnTitle = $('fnTitle'), fnTime = $('fnTime'), fnNew = $('fnNew');
+const fnName = $('fnName'), fnSave = $('fnSave'), fnLb = $('fnLb');
+
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmt(ms){ return (ms / 1000).toFixed(2); }
+function lbKey(li){ return 'pg_maze_lb_' + li; }
+function getScores(li){ try { return JSON.parse(localStorage.getItem(lbKey(li))) || []; } catch { return []; } }
+function saveScore(li, name, t){
+  const s = getScores(li);
+  s.push({ name: name || 'You', t });
+  s.sort((a, b) => a.t - b.t);
+  s.length = Math.min(s.length, 10);
+  localStorage.setItem(lbKey(li), JSON.stringify(s));
+  return s;
+}
+function lbTable(li){
+  const s = getScores(li);
+  if (!s.length) return '<p class="small">No times yet — be the first!</p>';
+  let h = '<table><tr><th>#</th><th>Name</th><th>Time</th></tr>';
+  s.forEach((e, i) => { h += `<tr><td>${i+1}</td><td>${escapeHtml(e.name)}</td><td class="t">${fmt(e.t)}s</td></tr>`; });
+  return h + '</table>';
+}
+
+function clearCourse(){ gateGroup.clear(); mtnObstacles = []; finishData = null; }
+
+// build a slalom of mountains and a finish line; returns the plane's spawn
+function buildCourse(li){
+  clearCourse();
+  const cfg = LEVELS[li];
+  // find a start direction in this level's terrain band
+  let startDir = null;
+  for (let t = 0; t < 800; t++) { const d = randDir(); const e = elevation(d); if (e >= cfg.eMin && e <= cfg.eMax) { startDir = d; break; } }
+  if (!startDir) startDir = randDir();
+  let cur = startDir.clone();
+  let tangent = new THREE.Vector3().crossVectors(cur, randDir()).normalize();
+  const tangent0 = tangent.clone();
+
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 1, flatShading: true });
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xf4f6fb, roughness: 1, flatShading: true });
+
+  // slalom of mountains, alternating sides of the course line
+  for (let i = 0; i < cfg.count; i++) {
+    const lateral = new THREE.Vector3().crossVectors(cur, tangent).normalize();
+    const side = (i % 2 === 0) ? 1 : -1;
+    const offsetPos = cur.clone().multiplyScalar(groundRadius(cur)).addScaledVector(lateral, side * cfg.zigAmp);
+    const mDir = offsetPos.clone().normalize();
+    const mGround = groundRadius(mDir);
+    const h = cfg.mtnH * (0.8 + Math.random() * 0.4);
+    const baseR = cfg.mtnR * (0.85 + Math.random() * 0.3);
+
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(baseR, h, 7), rockMat);
+    cone.position.copy(mDir).multiplyScalar(mGround + h / 2);   // base sits on the ground
+    cone.quaternion.setFromUnitVectors(UP, mDir);
+    gateGroup.add(cone);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(baseR * 0.3, h * 0.28, 7), snowMat);
+    cap.position.copy(mDir).multiplyScalar(mGround + h - h * 0.14);
+    cap.quaternion.setFromUnitVectors(UP, mDir);
+    gateGroup.add(cap);
+
+    mtnObstacles.push({ axis: mDir, groundR: mGround, height: h, baseR });
+
+    const stepAxis = new THREE.Vector3().crossVectors(cur, tangent).normalize();
+    cur.applyAxisAngle(stepAxis, cfg.step).normalize();
+    tangent.applyAxisAngle(cur, (Math.random() - 0.5) * cfg.meander).normalize();
+  }
+
+  // advance a little past the last mountain, then build the finish line
+  for (let k = 0; k < 2; k++) {
+    const a = new THREE.Vector3().crossVectors(cur, tangent).normalize();
+    cur.applyAxisAngle(a, cfg.step).normalize();
+  }
+  const finGround = groundRadius(cur);
+  const finDir = tangent.clone().normalize();                       // crossing direction
+  const finLateral = new THREE.Vector3().crossVectors(cur, tangent).normalize();
+  const finUp = cur.clone().normalize();
+  const halfWidth = cfg.zigAmp + 2600;
+  const postH = 3000;
+  const basis = new THREE.Matrix4().makeBasis(finLateral, finUp, finDir);
+
+  // two posts
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x1a1f29, roughness: 0.8 });
+  for (const s of [-1, 1]) {
+    const pdir = cur.clone().multiplyScalar(finGround).addScaledVector(finLateral, s * halfWidth).normalize();
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(140, 140, postH, 10), postMat);
+    post.position.copy(pdir).multiplyScalar(groundRadius(pdir) + postH / 2);
+    post.quaternion.setFromUnitVectors(UP, pdir);
+    gateGroup.add(post);
+  }
+  // top banner
+  const bar = new THREE.Mesh(
+    new THREE.BoxGeometry(halfWidth * 2, 600, 80),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x39d36a, emissiveIntensity: 0.5 })
+  );
+  bar.position.copy(cur).multiplyScalar(finGround + postH - 300);
+  bar.quaternion.setFromRotationMatrix(basis);
+  gateGroup.add(bar);
+  // translucent green "wall" you cross
+  const fwall = new THREE.Mesh(
+    new THREE.PlaneGeometry(halfWidth * 2, postH),
+    new THREE.MeshBasicMaterial({ color: 0x39d36a, transparent: true, opacity: 0.16, side: THREE.DoubleSide })
+  );
+  fwall.position.copy(cur).multiplyScalar(finGround + postH / 2);
+  fwall.quaternion.setFromRotationMatrix(basis);
+  gateGroup.add(fwall);
+
+  finishData = { center: cur.clone().multiplyScalar(finGround + postH / 2), dir: finDir, lateral: finLateral, halfWidth };
+
+  // spawn the plane a bit before the first mountain, facing down the course
+  const spawn = startDir.clone().multiplyScalar(groundRadius(startDir) + 700).addScaledVector(tangent0, -3000);
+  const sUp = spawn.clone().normalize();
+  const minR = groundRadius(sUp) + 250;
+  if (spawn.length() < minR) spawn.copy(sUp).multiplyScalar(minR);
+  return { spawn, face: tangent0 };
+}
+
+function orientPlane(forwardDir){
+  const up = plane.position.clone().sub(PLANET_CENTER).normalize();
+  const z = forwardDir.clone().normalize();
+  const x = new THREE.Vector3().crossVectors(up, z).normalize();
+  const y = new THREE.Vector3().crossVectors(z, x).normalize();
+  plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+
+function showHUD(show){
+  hudEl.classList.toggle('hidden', !show);
+  speedctlEl.classList.toggle('hidden', !show);
+}
+
+function exitStory(){
+  storyActive = false; activeVehicle = 'plane'; groundSpeed = 0; materials = 0;
+  despawnAllZombies(); removeHouse(); updateVehicleMesh();
+  storyhudEl.classList.add('hidden'); $('gameover').classList.add('hidden');
+  $('toast').classList.add('hidden'); uiEl.classList.remove('hidden');
+  miniWrap.classList.add('hidden'); crosshairEl.classList.add('hidden');
+}
+
+function startPractice(){
+  mode = 'practice'; clearCourse(); exitStory();
+  plane.quaternion.identity();
+  plane.position.copy(UP).multiplyScalar(groundRadius(UP) + 1400);
+  speed = 1.4; gravVel = 0;
+  lobbyEl.classList.add('hidden'); finishEl.classList.add('hidden'); mazehudEl.classList.add('hidden');
+  showHUD(true); paused = false; mazeRunning = false;
+}
+
+function startMaze(li){
+  currentLevel = li; mode = 'maze'; exitStory();
+  const c = buildCourse(li);
+  plane.position.copy(c.spawn);
+  orientPlane(c.face);
+  speed = 9; gravVel = 0;          // start with a healthy cruising speed
+  lobbyEl.classList.add('hidden'); finishEl.classList.add('hidden');
+  mazehudEl.classList.remove('hidden'); showHUD(true);
+  mzGate.textContent = '—'; mzTime.textContent = '0.00';
+  paused = false; mazeRunning = true; mazeStart = performance.now();
+}
+
+function finishMaze(timeMs){
+  mazeRunning = false; paused = true; lastTime = timeMs; saved = false;
+  const scores = getScores(currentLevel);
+  const best = scores.length ? scores[0].t : Infinity;
+  fnTitle.textContent = LEVELS[currentLevel].name + ' complete!';
+  fnTime.textContent = 'Your time: ' + fmt(timeMs) + 's';
+  fnNew.textContent = timeMs < best ? '🏆 New best time!' : (best < Infinity ? 'Best so far: ' + fmt(best) + 's' : '');
+  fnName.value = lastName;
+  fnSave.textContent = 'Save score';
+  fnLb.innerHTML = lbTable(currentLevel);
+  $('fnNext').style.display = currentLevel < LEVELS.length - 1 ? '' : 'none';
+  mazehudEl.classList.add('hidden');
+  finishEl.classList.remove('hidden');
+}
+
+function showLobby(){
+  mode = null; paused = true; mazeRunning = false; clearCourse(); exitStory();
+  mazehudEl.classList.add('hidden'); finishEl.classList.add('hidden');
+  lobbyEl.classList.remove('hidden'); showHUD(false);
+  renderLobbyLb();
+}
+
+function renderLobbyLb(){
+  $('lobbyLb').innerHTML = LEVELS.map((lv, i) =>
+    `<div class="lbcol"><b>${lv.name}</b>${lbTable(i)}</div>`).join('');
+}
+
+// build the maze level buttons + wire everything
+LEVELS.forEach((lv, i) => {
+  const b = document.createElement('button');
+  b.className = 'gbtn';
+  b.innerHTML = `<b>${lv.name}</b><span>${lv.desc} · ${lv.count} peaks</span>`;
+  b.addEventListener('click', () => startMaze(i));
+  $('mazeLevels').appendChild(b);
+});
+$('btnPractice').addEventListener('click', startPractice);
+fnSave.addEventListener('click', () => {
+  if (saved) return;
+  lastName = (fnName.value || '').trim() || 'You';
+  saveScore(currentLevel, lastName, lastTime);
+  fnLb.innerHTML = lbTable(currentLevel);
+  saved = true; fnSave.textContent = 'Saved ✓';
+  renderLobbyLb();
+});
+$('fnRetry').addEventListener('click', () => { finishEl.classList.add('hidden'); startMaze(currentLevel); });
+$('fnNext').addEventListener('click',  () => { finishEl.classList.add('hidden'); startMaze(Math.min(currentLevel + 1, LEVELS.length - 1)); });
+$('fnLobby').addEventListener('click', showLobby);
+
+// distance from point p to the segment a→b (so a fast plane can't skip a gate)
+function distToSeg(p, a, b){
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const apx = p.x - a.x, apy = p.y - a.y, apz = p.z - a.z;
+  const len2 = abx*abx + aby*aby + abz*abz || 1e-6;
+  let t = (apx*abx + apy*aby + apz*abz) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const dx = apx - abx*t, dy = apy - aby*t, dz = apz - abz*t;
+  return Math.sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+function updateCamera(){
+  if (firstPerson) {
+    camera.position.copy(new THREE.Vector3(0, 11, 24).applyQuaternion(plane.quaternion).add(plane.position));
+  } else {
+    const desired = camOffset.clone().applyQuaternion(plane.quaternion).add(plane.position);
+    const camK = (mode && !paused) ? Math.min(1, 0.12 + speed * 0.03) : 1;
+    camera.position.lerp(desired, camK);
+  }
+  const camToC = tmp.subVectors(camera.position, PLANET_CENTER);
+  const camMin = groundRadius(upDirV.copy(camToC).normalize()) + 60;
+  if (camToC.length() < camMin) { camToC.setLength(camMin); camera.position.copy(PLANET_CENTER).add(camToC); }
+  camera.up.set(0, 1, 0).applyQuaternion(plane.quaternion);
+  if (firstPerson) camera.lookAt(tmp2.copy(plane.position).addScaledVector(new THREE.Vector3(0,0,1).applyQuaternion(plane.quaternion), 4000));
+  else camera.lookAt(plane.position);
+}
+// ================================================================================
+
+// ========================= STORY MODE =========================
+// --- day / night ---
+const MORNING_LEN = 360, NIGHT_BASE = 120, NIGHT_STEP = 10, NIGHT_CAP = 600, REFUEL_PERIOD = 300;
+function nightLenFor(n){ return Math.min(NIGHT_CAP, NIGHT_BASE + (n - 1) * NIGHT_STEP); }
+
+// --- vehicles ('plane' | 'car' | 'moto' | 'foot') ---
+const VEHICLES = {
+  plane: { label: 'Plane',   kind: 'air',    tank: 200, baseDrain: 0.25, drainK: 0.010, damageable: false },
+  car:   { label: 'Car',     kind: 'ground', tank: 600,  baseDrain: 0.16, drainK: 0.14,  damageable: true,  maxSpeed: 6.0,  accel: 4.0, brake: 8.0, turnRate: 1.1, grip: 6.0, rideH: 22, maxHP: 100 },
+  moto:  { label: 'Moto',    kind: 'ground', tank: 450,  baseDrain: 0.20, drainK: 0.20,  damageable: true,  maxSpeed: 10.0, accel: 6.5, brake: 9.0, turnRate: 1.7, grip: 4.0, rideH: 16, maxHP: 70  },
+  foot:  { label: 'On Foot', kind: 'foot',   tank: 0,    baseDrain: 0,    drainK: 0,     damageable: false, maxSpeed: 1.2,  accel: 2.0, brake: 4.0, turnRate: 2.2, grip: 8.0, rideH: 12 },
+};
+let activeVehicle = 'plane';
+const fuel = { plane: 200, car: 600, moto: 450 };   // separate tanks
+const hp   = { car: 100, moto: 70 };              // chassis HP (0 = broken/wrecked)
+let carBroken = false;
+let groundSpeed = 0;
+
+// --- player + combat ---
+const PLAYER_MAX_HP = 100;
+let playerHP = 100;
+const WEAPONS = {
+  none:    { dmg: 0,  rof: 0,   range: 0,    ammo: 0,   spread: 0 },
+  pistol:  { dmg: 34, rof: 2.5, range: 1600, ammo: 48,  spread: 0.5 },
+  shotgun: { dmg: 22, rof: 1.1, range: 900,  ammo: 24,  spread: 7, pellets: 6 },
+  rifle:   { dmg: 30, rof: 9.0, range: 2400, ammo: 150, spread: 1.2 },
+};
+let weapon = 'none', ammo = 0, lastShotT = 0;
+let materials = 0, house = null;   // gathered building materials + your built safe house
+
+// --- zombies ---
+const Z_MAX = 60, Z_SPAWN_MIN = 900, Z_SPAWN_MAX = 2600, Z_DESPAWN_FAR = 6000;
+const Z_SPEED = 95, Z_SPEED_JITTER = 0.35, Z_CONTACT = 110, Z_HITR = 70, Z_HP = 100, Z_TOUCH_KILL_SPD = 4.0;
+const Z_DAMAGE_DPS = 18, Z_VEHICLE_DPS = 12, Z_WAVE_INTERVAL = 4.0, Z_WAVE_BASE = 5, Z_WAVE_RAMP = 1.0;
+
+// --- buildings / loot ---
+const BUILDING_COUNT = 80, B_ELEV_MIN = 130, B_ELEV_MAX = 2000, B_SPACING = 900, LOOT_RADIUS = 240, B_HALF = 60;
+const LOOT_FUEL_CHANCE = 0.12, LOOT_WEAPON_CHANCE = 0.31, LOOT_MAT_CHANCE = 0.35, LOOT_FUEL_FRAC = 0.45;
+const LOOT_EMPTY = 0, LOOT_FUEL = 1, LOOT_WEAPON = 2, LOOT_MATERIALS = 3;
+const MAT_PER_LOOT = 3, HOUSE_COST = 5, HOUSE_SAFE_R = 1300;   // materials & safe-house
+
+// --- story state ---
+let storyActive = false, phase = 'morning', phaseLen = MORNING_LEN, phaseTime = 0;
+let nightCount = 0, dayCount = 1, storyTime = 0, nextRefuelAt = REFUEL_PERIOD, gameOverFlag = false;
+const zombies = [], buildings = [], bullets = [];
+const zombieGroup = new THREE.Group(), buildingGroup = new THREE.Group(), bulletGroup = new THREE.Group();
+scene.add(zombieGroup, buildingGroup, bulletGroup);
+const tracerMat = new THREE.MeshBasicMaterial({ color: 0xfff0a0 });
+
+function isMorning(){ return storyActive && phase === 'morning'; }
+function isNight(){ return storyActive && phase === 'night'; }
+function nightElapsed(){ return phase === 'night' ? phaseTime : 0; }
+function vehicleSpeedHUD(){ return (VEHICLES[activeVehicle].kind === 'air' ? speed : Math.abs(groundSpeed)) * 100; }
+
+const shPhase = $('shPhase'), shDay = $('shDay'), shSupply = $('shSupply'), shHP = $('shHP'),
+      shFuel = $('shFuel'), shVeh = $('shVeh'), shWeap = $('shWeap'), shMat = $('shMat'), shZ = $('shZ'),
+      storyhudEl = $('storyhud'), uiEl = $('ui'), miniWrap = $('minimapWrap'), crosshairEl = $('crosshair');
+const miniCanvas = $('minimap'), miniCtx = miniCanvas.getContext('2d');
+
+let toastTimer = null;
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.classList.remove('hidden'); el.style.opacity = '1';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 1800);
+}
+function clock2(s){ s = Math.max(0, Math.ceil(s)); return Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0'); }
+
+function updateVehicleMesh(){
+  planeBody.visible = activeVehicle === 'plane';
+  carBody.visible   = activeVehicle === 'car';
+  motoBody.visible  = activeVehicle === 'moto';
+  footBody.visible  = activeVehicle === 'foot';
+}
+
+function snapToGround(){
+  const up = plane.position.clone().sub(PLANET_CENTER).normalize();
+  plane.position.copy(PLANET_CENTER).addScaledVector(up, groundRadius(up) + VEHICLES[activeVehicle].rideH);
+}
+function orientToSurface(fwd){
+  const up = plane.position.clone().sub(PLANET_CENTER).normalize();
+  const z = fwd.clone().addScaledVector(up, -fwd.dot(up));
+  if (z.lengthSq() < 1e-6) z.copy(new THREE.Vector3(0,0,1).applyQuaternion(plane.quaternion));
+  z.normalize();
+  const x = new THREE.Vector3().crossVectors(up, z).normalize();
+  const y = new THREE.Vector3().crossVectors(z, x).normalize();
+  plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+
+function startPhase(which){
+  phase = which; phaseTime = 0;
+  if (which === 'morning'){
+    phaseLen = MORNING_LEN; dayCount++;
+    despawnAllZombies();
+    toast('☀ Morning — the dead are gone. Take to the skies.');
+  } else {
+    nightCount++; phaseLen = nightLenFor(nightCount);
+    if (VEHICLES[activeVehicle].kind === 'air') switchTo(hp.car > 0 && fuel.car > 0 ? 'car' : (fuel.moto > 0 && hp.moto > 0 ? 'moto' : 'foot'), true);
+    toast('🌙 Night falls — zombies are coming!');
+  }
+  updateStoryHUD();
+}
+
+function refuelAndRepairAll(){
+  for (const k in fuel) fuel[k] = VEHICLES[k].tank;
+  hp.car = VEHICLES.car.maxHP; hp.moto = VEHICLES.moto.maxHP; carBroken = false;
+  playerHP = PLAYER_MAX_HP;
+  toast('📦 Supplies restocked — fuel, repairs & health topped up.');
+}
+
+function trySwitchVehicle(id){
+  if (!storyActive || paused || gameOverFlag || id === activeVehicle) return;
+  if (id === 'plane' && !isMorning()) { toast('The plane only flies in the morning.'); return; }
+  if ((id === 'plane' || id === 'car' || id === 'moto') && fuel[id] <= 0) { toast(VEHICLES[id].label + ' is out of fuel.'); return; }
+  if (id === 'moto' && hp.moto <= 0) { toast('Motorcycle is wrecked.'); return; }
+  switchTo(id);
+}
+function switchTo(id, forced){
+  activeVehicle = id;
+  if (id === 'plane'){
+    const up = plane.position.clone().sub(PLANET_CENTER).normalize();
+    const minR = groundRadius(up) + 300;
+    if (plane.position.length() < minR) plane.position.copy(PLANET_CENTER).addScaledVector(up, minR);
+    speed = Math.max(1.4, speed); gravVel = 0;
+  } else { snapToGround(); groundSpeed = 0; }
+  updateVehicleMesh();
+  if (forced) toast(VEHICLES[id].label + ' active.');
+}
+
+function applyFuelDrain(dt){
+  const v = VEHICLES[activeVehicle];
+  if (v.kind === 'foot') return;
+  const cur = v.kind === 'air' ? speed : Math.abs(groundSpeed);
+  const mx  = v.kind === 'air' ? maxSpeed : v.maxSpeed;
+  const frac = Math.min(1, Math.max(0, cur / mx));
+  fuel[activeVehicle] = Math.max(0, fuel[activeVehicle] - (v.baseDrain + v.drainK * frac * frac) * dt);
+}
+
+function onGroundCrash(v){
+  // collisions only stop you — vehicles take NO damage from crashes;
+  // they only wreck when zombies attack them.
+}
+
+function driveStep(dt){
+  const v = VEHICLES[activeVehicle];
+  const empty = v.kind !== 'foot' && fuel[activeVehicle] <= 0;
+  let acc = 0;
+  if (keys['KeyW'] && !empty) acc = 1;
+  if (keys['KeyS']) acc = -1;
+  const steer = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
+  const effMax = (activeVehicle === 'car' && carBroken) ? v.maxSpeed * 0.5 : v.maxSpeed;
+  if (acc > 0)      groundSpeed += v.accel * dt;
+  else if (acc < 0) groundSpeed -= v.brake * dt;
+  else              groundSpeed -= Math.sign(groundSpeed) * Math.min(Math.abs(groundSpeed), v.grip * 0.5 * dt);
+  groundSpeed = Math.max(-effMax * 0.4, Math.min(effMax, groundSpeed));
+
+  const sf = Math.min(1, Math.abs(groundSpeed) / (effMax * 0.4));
+  applyRotation(new THREE.Vector3(0, 1, 0), steer * v.turnRate * dt * (0.35 + 0.65 * sf));
+
+  const up = plane.position.clone().sub(PLANET_CENTER).normalize();
+  let fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
+  fwd.addScaledVector(up, -fwd.dot(up)).normalize();
+  const frameMove = groundSpeed * 60 * dt;
+  const steps = Math.min(60, Math.max(1, Math.ceil(Math.abs(frameMove) / 25)));
+  for (let s = 0; s < steps; s++){
+    const before = stepStart.copy(plane.position);
+    plane.position.addScaledVector(fwd, frameMove / steps);
+    snapToGround();
+    for (let i = 0; i < treeColliders.length; i++){
+      const t = treeColliders[i];
+      const dx = plane.position.x - t.x, dy = plane.position.y - t.y, dz = plane.position.z - t.z;
+      const rr = t.r + 24;
+      if (dx*dx + dy*dy + dz*dz < rr*rr){ plane.position.copy(before); onGroundCrash(v); groundSpeed *= 0.3; s = steps; break; }
+    }
+  }
+  orientToSurface(fwd);
+}
+
+// ---- zombies ----
+function makeZombieMesh(){
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: 0x5b8c3a, roughness: 1 });
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(7, 16, 4, 6), m); torso.position.y = 18; g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(6, 8, 8), m); head.position.y = 34; g.add(head);
+  return g;
+}
+function spawnZombieNearPlayer(){
+  const up = plane.position.clone().sub(PLANET_CENTER).normalize();
+  let axis = new THREE.Vector3().crossVectors(up, randDir());
+  if (axis.lengthSq() < 1e-6) axis.set(1, 0, 0);
+  axis.normalize();
+  const dist = Z_SPAWN_MIN + Math.random() * (Z_SPAWN_MAX - Z_SPAWN_MIN);
+  const dir = up.clone().applyAxisAngle(axis, dist / R).normalize();
+  if (elevation(dir) < WATER + 20) return;
+  if (house && dir.angleTo(house.dir) < house.r / R) return;   // never spawn inside the safe zone
+  const mesh = makeZombieMesh();
+  mesh.position.copy(dir).multiplyScalar(groundRadius(dir) + 30);
+  mesh.quaternion.setFromUnitVectors(UP, dir);
+  zombieGroup.add(mesh);
+  zombies.push({ dir, mesh, hp: Z_HP, speed: Z_SPEED * (1 - Z_SPEED_JITTER + Math.random() * 2 * Z_SPEED_JITTER) });
+}
+function despawnAllZombies(){ for (const z of zombies) zombieGroup.remove(z.mesh); zombies.length = 0; }
+let zSpawnTimer = 0;
+function updateZombieSpawning(dt){
+  if (!isNight()){ if (zombies.length) despawnAllZombies(); return; }
+  zSpawnTimer -= dt;
+  if (zSpawnTimer > 0 || zombies.length >= Z_MAX) return;
+  zSpawnTimer = Z_WAVE_INTERVAL;
+  const batch = Math.round(Z_WAVE_BASE + Z_WAVE_RAMP * (nightElapsed() / 60));
+  for (let i = 0; i < batch && zombies.length < Z_MAX; i++) spawnZombieNearPlayer();
+}
+function updateZombies(dt){
+  if (!zombies.length) return;
+  const p = plane.position;
+  const riderVuln = activeVehicle === 'foot' ? true
+                  : activeVehicle === 'moto' ? true
+                  : activeVehicle === 'car'  ? carBroken : false;
+  const splat = vehicleSpeedHUD() >= Z_TOUCH_KILL_SPD * 100 && activeVehicle !== 'plane' && activeVehicle !== 'foot';
+  for (let i = zombies.length - 1; i >= 0; i--){
+    const z = zombies[i];
+    const toP = p.clone().sub(PLANET_CENTER).normalize();
+    const axis = new THREE.Vector3().crossVectors(z.dir, toP);
+    if (axis.lengthSq() > 1e-9){ axis.normalize(); z.dir.applyAxisAngle(axis, (z.speed * dt) / R).normalize(); }
+    // keep zombies outside the safe house — they can't swarm in
+    if (house){
+      const minAng = house.r / R;
+      if (z.dir.angleTo(house.dir) < minAng){
+        const ax = new THREE.Vector3().crossVectors(house.dir, z.dir);
+        if (ax.lengthSq() > 1e-9){ ax.normalize(); z.dir.copy(house.dir).applyAxisAngle(ax, minAng).normalize(); }
+      }
+    }
+    z.mesh.position.copy(z.dir).multiplyScalar(groundRadius(z.dir) + 30);
+    z.mesh.quaternion.setFromUnitVectors(UP, z.dir);
+    const dx = z.mesh.position.x - p.x, dy = z.mesh.position.y - p.y, dz = z.mesh.position.z - p.z, d2 = dx*dx + dy*dy + dz*dz;
+    if (d2 > Z_DESPAWN_FAR * Z_DESPAWN_FAR){ zombieGroup.remove(z.mesh); zombies.splice(i, 1); continue; }
+    if (d2 < Z_CONTACT * Z_CONTACT){
+      if (splat){ z.hp = 0; }
+      else {
+        if (activeVehicle === 'car'){ hp.car = Math.max(0, hp.car - Z_VEHICLE_DPS * dt); if (hp.car <= 0) carBroken = true; }
+        if (activeVehicle === 'moto'){ hp.moto = Math.max(0, hp.moto - Z_VEHICLE_DPS * dt); }
+        if (riderVuln) playerHP = Math.max(0, playerHP - Z_DAMAGE_DPS * dt);
+      }
+    }
+    if (z.hp <= 0){ zombieGroup.remove(z.mesh); zombies.splice(i, 1); }
+  }
+  if (playerHP <= 0) gameOver();
+}
+
+// ---- combat ----
+function nearestZombieInArc(range, cosMin){
+  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
+  let best = null, bestD = range * range;
+  for (const z of zombies){
+    const to = z.mesh.position.clone().sub(plane.position);
+    const d2 = to.lengthSq();
+    if (d2 > bestD) continue;
+    if (to.normalize().dot(fwd) < cosMin) continue;
+    bestD = d2; best = z;
+  }
+  return best;
+}
+function spawnTracer(from, dir, len){
+  const L = Math.min(len, 1600);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, L, 5), tracerMat);
+  mesh.position.copy(from).addScaledVector(dir, L / 2);
+  mesh.quaternion.setFromUnitVectors(UP, dir);
+  bulletGroup.add(mesh);
+  bullets.push({ mesh, life: 0.07 });
+}
+function fireWeapon(w){
+  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
+  const pellets = w.pellets || 1;
+  for (let pe = 0; pe < pellets; pe++){
+    const target = nearestZombieInArc(w.range, 0.4);
+    const dir = (target ? target.mesh.position.clone().sub(plane.position).normalize() : fwd.clone());
+    dir.applyAxisAngle(UP, (Math.random() - 0.5) * w.spread * 0.02).normalize();
+    spawnTracer(plane.position, dir, w.range);
+    if (target){ target.hp -= w.dmg; }
+  }
+}
+function updateBullets(dt){
+  for (let i = bullets.length - 1; i >= 0; i--){ const b = bullets[i]; b.life -= dt; if (b.life <= 0){ bulletGroup.remove(b.mesh); bullets.splice(i, 1); } }
+}
+function updateCombat(dt, now){
+  updateBullets(dt);
+  if (activeVehicle === 'plane') return;     // no shooting from the plane
+  const w = WEAPONS[weapon];
+  if (keys['fire'] && weapon !== 'none' && ammo > 0 && now - lastShotT >= 1 / w.rof){
+    lastShotT = now; fireWeapon(w);
+    if (--ammo <= 0){ weapon = 'none'; toast('Out of ammo.'); }
+  }
+}
+
+// ---- buildings / loot ----
+function buildingLootRoll(){ const r = Math.random();
+  if (r < LOOT_FUEL_CHANCE) return LOOT_FUEL;
+  if (r < LOOT_FUEL_CHANCE + LOOT_WEAPON_CHANCE) return LOOT_WEAPON;
+  if (r < LOOT_FUEL_CHANCE + LOOT_WEAPON_CHANCE + LOOT_MAT_CHANCE) return LOOT_MATERIALS;
+  return LOOT_EMPTY;
+}
+function lootColor(t){ return t === LOOT_FUEL ? 0x39d36a : t === LOOT_WEAPON ? 0xffb020 : t === LOOT_MATERIALS ? 0x40a0ff : 0x888888; }
+function buildBuildings(){
+  let attempts = 0;
+  while (buildings.length < BUILDING_COUNT && attempts < BUILDING_COUNT * 40){
+    attempts++;
+    const dir = randDir(); const e = elevation(dir);
+    if (e < B_ELEV_MIN || e > B_ELEV_MAX) continue;
+    const gr = groundRadius(dir);
+    const pos = dir.clone().multiplyScalar(gr);
+    let ok = true;
+    for (const b of buildings){ const ddx=pos.x-b.x, ddy=pos.y-b.y, ddz=pos.z-b.z; if (ddx*ddx+ddy*ddy+ddz*ddz < B_SPACING*B_SPACING){ ok = false; break; } }
+    if (!ok) continue;
+    const lootType = buildingLootRoll();
+    const g = new THREE.Group();
+    const wallC = new THREE.Color().setHSL(0.08, 0.22, 0.42 + Math.random() * 0.18);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(90, 70, 90), new THREE.MeshStandardMaterial({ color: wallC, roughness: 1 }));
+    body.position.y = 35; g.add(body);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(75, 50, 4), new THREE.MeshStandardMaterial({ color: 0x6b3a2a, roughness: 1 }));
+    roof.position.y = 95; roof.rotation.y = Math.PI / 4; g.add(roof);
+    let marker = null;
+    if (lootType !== LOOT_EMPTY){
+      marker = new THREE.Mesh(new THREE.SphereGeometry(22, 10, 10),
+        new THREE.MeshBasicMaterial({ color: lootColor(lootType) }));
+      marker.position.y = 200; g.add(marker);
+    }
+    g.position.copy(dir).multiplyScalar(gr); g.quaternion.setFromUnitVectors(UP, dir);
+    buildingGroup.add(g);
+    const c = dir.clone().multiplyScalar(gr + 40);
+    buildings.push({ x: c.x, y: c.y, z: c.z, looted: false, lootType, marker });
+    treeColliders.push({ x: c.x, y: c.y, z: c.z, r: B_HALF });
+  }
+}
+function checkBuildingLoot(){
+  const p = plane.position, r2 = LOOT_RADIUS * LOOT_RADIUS;
+  for (const b of buildings){
+    if (b.looted) continue;
+    const dx = p.x - b.x, dy = p.y - b.y, dz = p.z - b.z;
+    if (dx*dx + dy*dy + dz*dz > r2) continue;
+    b.looted = true; if (b.marker) b.marker.visible = false;
+    if (b.lootType === LOOT_FUEL){
+      const v = activeVehicle === 'foot' ? 'car' : activeVehicle;
+      fuel[v] = Math.min(VEHICLES[v].tank, fuel[v] + LOOT_FUEL_FRAC * VEHICLES[v].tank);
+      toast('⛽ Found fuel! +' + Math.round(LOOT_FUEL_FRAC * 100) + '% ' + VEHICLES[v].label + ' tank');
+    } else if (b.lootType === LOOT_WEAPON){
+      const pool = ['pistol', 'shotgun', 'rifle'];
+      weapon = pool[(Math.random() * pool.length) | 0]; ammo = WEAPONS[weapon].ammo;
+      toast('🔫 Found a ' + weapon + '!');
+    } else if (b.lootType === LOOT_MATERIALS){
+      materials += MAT_PER_LOOT;
+      toast('🪵 Found building materials! (+' + MAT_PER_LOOT + ', need ' + HOUSE_COST + ' for a house)');
+    } else toast('🏚 Empty house…');
+  }
+}
+
+// ---- build / safe house ----
+function removeHouse(){
+  if (!house) return;
+  buildingGroup.remove(house.group);
+  if (house.collider){ const idx = treeColliders.indexOf(house.collider); if (idx >= 0) treeColliders.splice(idx, 1); }
+  house = null;
+}
+function buildHouse(){
+  if (!storyActive || paused || gameOverFlag) return;
+  if (house){ toast('You already have a safe house.'); return; }
+  if (materials < HOUSE_COST){ toast('Need ' + HOUSE_COST + ' materials (have ' + materials + ').'); return; }
+  materials -= HOUSE_COST;
+  const dir = plane.position.clone().sub(PLANET_CENTER).normalize();
+  const gr = groundRadius(dir);
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.85 });
+  const roofM = new THREE.MeshStandardMaterial({ color: 0x55351f, roughness: 1 });
+  const doorM = new THREE.MeshStandardMaterial({ color: 0x3a2616, roughness: 1 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(190, 130, 190), wood); base.position.y = 65; g.add(base);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(165, 95, 4), roofM); roof.position.y = 178; roof.rotation.y = Math.PI / 4; g.add(roof);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(46, 82, 6), doorM); door.position.set(0, 41, 96); g.add(door);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(HOUSE_SAFE_R * 0.97, HOUSE_SAFE_R, 64),
+    new THREE.MeshBasicMaterial({ color: 0x39d36a, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 6; g.add(ring);
+  g.position.copy(dir).multiplyScalar(gr); g.quaternion.setFromUnitVectors(UP, dir);
+  buildingGroup.add(g);
+  const c = dir.clone().multiplyScalar(gr + 65);
+  const col = { x: c.x, y: c.y, z: c.z, r: 130 };
+  treeColliders.push(col);
+  house = { dir: dir.clone(), center: c, r: HOUSE_SAFE_R, group: g, collider: col };
+  toast('🏠 Safe house built — zombies keep their distance!');
+}
+
+// ---- zombie radar (minimap) ----
+function updateMinimap(){
+  const W = miniCanvas.width, H = miniCanvas.height, cx = W / 2, cy = H / 2, rad = W / 2 - 4, range = 3600, ctx = miniCtx;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = isNight() ? 'rgba(12,6,16,0.82)' : 'rgba(8,14,26,0.72)';
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,180,255,0.16)'; ctx.lineWidth = 1;
+  for (const rr of [0.33, 0.66, 1]) { ctx.beginPath(); ctx.arc(cx, cy, rad * rr, 0, Math.PI * 2); ctx.stroke(); }
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(plane.quaternion);
+  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
+  const p = plane.position;
+  const proj = (ox, oy, oz) => [ox*right.x + oy*right.y + oz*right.z, ox*fwd.x + oy*fwd.y + oz*fwd.z];
+  if (house){
+    const [mx, my] = proj(house.center.x - p.x, house.center.y - p.y, house.center.z - p.z);
+    const hx = cx + mx/range*rad, hy = cy - my/range*rad;
+    ctx.strokeStyle = 'rgba(70,220,130,0.5)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(hx, hy, Math.max(3, house.r/range*rad), 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = '#39d36a'; ctx.fillRect(hx-3, hy-3, 6, 6);
+  }
+  for (const b of buildings){
+    if (b.looted) continue;
+    const [mx, my] = proj(b.x - p.x, b.y - p.y, b.z - p.z);
+    if (Math.hypot(mx, my) > range) continue;
+    ctx.fillStyle = '#' + lootColor(b.lootType).toString(16).padStart(6, '0');
+    ctx.beginPath(); ctx.arc(cx + mx/range*rad, cy - my/range*rad, 2.4, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const z of zombies){
+    const [mx, my] = proj(z.mesh.position.x - p.x, z.mesh.position.y - p.y, z.mesh.position.z - p.z);
+    if (Math.hypot(mx, my) > range) continue;
+    const x = cx + mx/range*rad, y = cy - my/range*rad;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 8);
+    g.addColorStop(0, 'rgba(255,60,40,0.5)'); g.addColorStop(1, 'rgba(255,60,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.moveTo(cx, cy-7); ctx.lineTo(cx-5, cy+6); ctx.lineTo(cx+5, cy+6); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,180,255,0.5)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.stroke();
+}
+
+function updateStoryHUD(){
+  if (!storyActive) return;
+  shPhase.textContent = (phase === 'morning' ? '☀ MORNING ' : '🌙 NIGHT ') + clock2(phaseLen - phaseTime);
+  shPhase.style.color = phase === 'morning' ? '#ffe08a' : '#9fb4ff';
+  shDay.textContent = phase === 'morning' ? ('Day ' + dayCount) : ('Night ' + nightCount);
+  shSupply.textContent = 'Supplies in ' + clock2(nextRefuelAt - storyTime);
+  shHP.textContent = Math.ceil(playerHP);
+  const v = activeVehicle;
+  shFuel.textContent = v === 'foot' ? '—' : (Math.ceil(fuel[v]) + '/' + VEHICLES[v].tank);
+  let vs = VEHICLES[v].label;
+  if (v === 'plane') vs += ' (immune)';
+  else if (v === 'car') vs += carBroken ? ' — BROKEN' : ' — ' + Math.ceil(hp.car) + 'hp';
+  else if (v === 'moto') vs += hp.moto <= 0 ? ' — WRECKED' : ' — ' + Math.ceil(hp.moto) + 'hp';
+  shVeh.textContent = vs;
+  shWeap.textContent = 'WEAPON ' + (weapon === 'none' ? '—' : weapon) + ' · AMMO ' + ammo;
+  shMat.textContent = '🪵 Materials ' + materials + ' · House: ' + (house ? 'built ✓' : (materials >= HOUSE_COST ? 'press B to build' : 'none'));
+  shZ.textContent = 'zombies ' + zombies.length;
+  // crosshair: shown when you can shoot (not in the plane); red when a zombie is locked
+  const canShoot = activeVehicle !== 'plane';
+  crosshairEl.classList.toggle('hidden', !canShoot);
+  if (canShoot) {
+    const tgt = (weapon !== 'none') ? nearestZombieInArc(WEAPONS[weapon].range, 0.4) : null;
+    crosshairEl.classList.toggle('lock', !!tgt);
+  }
+}
+
+function getStoryBest(){ return parseInt(localStorage.getItem('pg_story_best') || '0', 10) || 0; }
+function startStory(){
+  mode = 'story'; clearCourse(); gameOverFlag = false;
+  storyActive = true; storyTime = 0; nextRefuelAt = REFUEL_PERIOD;
+  nightCount = 0; dayCount = 1; phase = 'morning'; phaseLen = MORNING_LEN; phaseTime = 0;
+  activeVehicle = 'plane'; weapon = 'none'; ammo = 0; playerHP = PLAYER_MAX_HP; groundSpeed = 0;
+  materials = 0; removeHouse();
+  if (!buildings.length) buildBuildings();
+  for (const b of buildings){ b.looted = false; if (b.marker) b.marker.visible = true; }   // restock loot
+  despawnAllZombies(); refuelAndRepairAll();
+  plane.quaternion.identity();
+  plane.position.copy(UP).multiplyScalar(groundRadius(UP) + 1400);
+  speed = 1.4; gravVel = 0; updateVehicleMesh();
+  lobbyEl.classList.add('hidden'); finishEl.classList.add('hidden'); mazehudEl.classList.add('hidden'); $('gameover').classList.add('hidden');
+  uiEl.classList.add('hidden'); speedctlEl.classList.add('hidden');
+  storyhudEl.classList.remove('hidden'); miniWrap.classList.remove('hidden'); showHUD(true);
+  paused = false; updateStoryHUD();
+  toast('Day 1 — fly while you can. Night is coming.');
+}
+function gameOver(){
+  if (gameOverFlag) return;
+  gameOverFlag = true; paused = true; despawnAllZombies();
+  const best = Math.max(getStoryBest(), dayCount);
+  localStorage.setItem('pg_story_best', String(best));
+  $('goSub').textContent = 'You survived to Day ' + dayCount + '.   Best: Day ' + best + '.';
+  storyhudEl.classList.add('hidden');
+  $('gameover').classList.remove('hidden');
+}
+$('btnStory').addEventListener('click', startStory);
+$('btnGoRetry').addEventListener('click', () => { $('gameover').classList.add('hidden'); startStory(); });
+$('btnGoLobby').addEventListener('click', () => { $('gameover').classList.add('hidden'); showLobby(); });
+
+// ---- the existing flight physics, extracted so the plane uses it in every mode ----
+function flyStep(dt){
+  const turn = 1.6 * dt;
+  if (keys['KeyW']) applyRotation(new THREE.Vector3(1,0,0),  turn);
+  if (keys['KeyS']) applyRotation(new THREE.Vector3(1,0,0), -turn);
+  if (keys['KeyA']) applyRotation(new THREE.Vector3(0,1,0),  turn);
+  if (keys['KeyD']) applyRotation(new THREE.Vector3(0,1,0), -turn);
+  if (keys['KeyQ']) applyRotation(new THREE.Vector3(0,0,1),  turn);
+  if (keys['KeyE']) applyRotation(new THREE.Vector3(0,0,1), -turn);
+  {
+    const up = new THREE.Vector3().subVectors(plane.position, PLANET_CENTER).normalize();
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
+    const radial = fwd.dot(up);
+    if (Math.abs(radial) < 0.999) {
+      const desFwd = fwd.clone().addScaledVector(up, -radial).normalize();
+      const full = new THREE.Quaternion().setFromUnitVectors(fwd, desFwd);
+      const lvl = new THREE.Quaternion().slerp(full, 1 - Math.pow(0.2, dt));
+      plane.quaternion.premultiply(lvl);
+    }
+  }
+  const throttleRate = 6 + speed * 1.2;
+  if (keys['ArrowUp'])   speed = Math.min(maxSpeed, speed + throttleRate*dt);
+  if (keys['ArrowDown']) speed = Math.max(minSpeed, speed - throttleRate*dt);
+  if (storyActive && activeVehicle === 'plane' && fuel.plane <= 0) speed = Math.max(minSpeed, speed - 8*dt); // stall
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
+  const frameMove = speed * 60 * dt;
+  const steps = Math.min(120, Math.max(1, Math.ceil(frameMove / 25)));
+  const stepMove = frameMove / steps;
+  const stepDt = dt / steps;
+  const ceilR = R + 9000;
+  let ground = R;
+  for (let s = 0; s < steps; s++) {
+    const before = stepStart.copy(plane.position);
+    plane.position.addScaledVector(forward, stepMove);
+    const down = tmp.copy(PLANET_CENTER).sub(plane.position).normalize();
+    gravVel = Math.min(gravVel + GRAVITY * stepDt, 200);
+    plane.position.addScaledVector(down, gravVel * stepDt);
+    const toPlane = toPlaneV.subVectors(plane.position, PLANET_CENTER);
+    const dist = toPlane.length();
+    ground = groundRadius(upDirV.copy(toPlane).normalize());
+    const floorR = ground + 130;
+    if (dist < floorR) {
+      toPlane.setLength(floorR); plane.position.copy(PLANET_CENTER).add(toPlane); gravVel = 0;
+    } else if (dist > ceilR) {
+      toPlane.setLength(ceilR); plane.position.copy(PLANET_CENTER).add(toPlane); gravVel = 0;
+    }
+    let hit = false;
+    for (let i = 0; i < treeColliders.length; i++) {
+      const t = treeColliders[i];
+      const dx = plane.position.x - t.x, dy = plane.position.y - t.y, dz = plane.position.z - t.z;
+      const rr = t.r + 30;
+      if (dx*dx + dy*dy + dz*dz < rr*rr) { plane.position.copy(before); gravVel = 0; hit = true; break; }
+    }
+    if (!hit) for (let i = 0; i < mtnObstacles.length; i++) {
+      const m = mtnObstacles[i];
+      const proj = plane.position.dot(m.axis);
+      const hAbove = proj - m.groundR;
+      if (hAbove < 0 || hAbove > m.height) continue;
+      const perp2 = Math.max(0, plane.position.lengthSq() - proj * proj);
+      const coneR = m.baseR * (1 - hAbove / m.height) + 45;
+      if (perp2 < coneR * coneR) { plane.position.copy(before); gravVel = 0; break; }
+    }
+  }
+  lastGround = ground;
+}
+// ================================================================================
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // gameplay runs only while actually playing (not in lobby / finish / game-over)
+  if (mode && !paused) {
+    framePrev.copy(plane.position);
+
+    // ---- story clock: day/night phases + 5-minute supply tick + fuel drain ----
+    if (storyActive) {
+      storyTime += dt; phaseTime += dt;
+      while (phaseTime >= phaseLen) { const carry = phaseTime - phaseLen; startPhase(phase === 'morning' ? 'night' : 'morning'); phaseTime = carry; }
+      while (storyTime >= nextRefuelAt) { refuelAndRepairAll(); nextRefuelAt += REFUEL_PERIOD; }
+      if (isNight() && VEHICLES[activeVehicle].kind === 'air') switchTo('car', true);   // safety net
+      applyFuelDrain(dt);
+    }
+
+    // ---- move: fly (plane / any non-story mode) or drive (ground / foot) ----
+    const vk = VEHICLES[activeVehicle].kind;
+    if (!storyActive || vk === 'air') {
+      flyStep(dt);
+    } else {
+      driveStep(dt);
+      if (fuel[activeVehicle] <= 0) groundSpeed *= (1 - dt);
+      lastGround = groundRadius(upDirV.copy(plane.position).sub(PLANET_CENTER).normalize());
+    }
+
+    // ---- maze: finish-line crossing + timer ----
+    if (mode === 'maze' && mazeRunning && finishData) {
+      const f = finishData, c = f.center;
+      const s0 = (framePrev.x-c.x)*f.dir.x + (framePrev.y-c.y)*f.dir.y + (framePrev.z-c.z)*f.dir.z;
+      const s1 = (plane.position.x-c.x)*f.dir.x + (plane.position.y-c.y)*f.dir.y + (plane.position.z-c.z)*f.dir.z;
+      if ((s0 < 0) !== (s1 < 0)) {     // crossed the finish plane (from any side)
+        const lat = Math.abs((plane.position.x-c.x)*f.lateral.x + (plane.position.y-c.y)*f.lateral.y + (plane.position.z-c.z)*f.lateral.z);
+        if (lat < f.halfWidth) finishMaze(performance.now() - mazeStart);
+      }
+      if (mazeRunning) {
+        mzGate.textContent = (plane.position.distanceTo(f.center) / 1000).toFixed(1) + 'k';
+        mzTime.textContent = fmt(performance.now() - mazeStart);
+      }
+    }
+
+    // ---- story: zombies, combat, loot, HUD ----
+    if (storyActive && !gameOverFlag) {
+      updateZombieSpawning(dt);
+      updateZombies(dt);
+      updateCombat(dt, performance.now() / 1000);
+      checkBuildingLoot();
+      updateStoryHUD();
+      updateMinimap();
+    }
+
+    speedEl.textContent = ((storyActive && vk !== 'air') ? vehicleSpeedHUD() : speed * 100).toFixed(0);
+    altEl.textContent = (plane.position.distanceTo(PLANET_CENTER) - lastGround).toFixed(0);
+  }
+
+  updateSky(dt);
+  updateCamera();
+  renderer.render(scene, camera);
+}
+showLobby();
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
