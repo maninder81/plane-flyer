@@ -813,6 +813,7 @@ function showHUD(show){
 function exitStory(){
   storyActive = false; activeVehicle = 'plane'; groundSpeed = 0; materials = 0;
   despawnAllZombies(); removeHouse(); updateVehicleMesh();
+  buildingGroup.visible = false;   // hide story houses in practice/maze/lobby
   for (const b of bullets) bulletGroup.remove(b.mesh); bullets.length = 0;   // flush in-flight tracers
   storyhudEl.classList.add('hidden'); $('gameover').classList.add('hidden');
   $('toast').classList.add('hidden'); uiEl.classList.remove('hidden');
@@ -961,6 +962,7 @@ const MAT_PER_LOOT = 3, HOUSE_COST = 5, HOUSE_SAFE_R = 1300;   // materials & sa
 let storyActive = false, phase = 'morning', phaseLen = MORNING_LEN, phaseTime = 0;
 let nightCount = 0, dayCount = 1, storyTime = 0, nextRefuelAt = REFUEL_PERIOD, gameOverFlag = false;
 const zombies = [], buildings = [], bullets = [];
+const buildingColliders = [];   // story-only building walls (kept OUT of treeColliders so they don't leak into practice/maze)
 const zombieGroup = new THREE.Group(), buildingGroup = new THREE.Group(), bulletGroup = new THREE.Group();
 scene.add(zombieGroup, buildingGroup, bulletGroup);
 const tracerMat = new THREE.MeshBasicMaterial({ color: 0xfff0a0 });
@@ -1089,6 +1091,12 @@ function driveStep(dt){
     snapToGround();
     for (let i = 0; i < treeColliders.length; i++){
       const t = treeColliders[i];
+      const dx = plane.position.x - t.x, dy = plane.position.y - t.y, dz = plane.position.z - t.z;
+      const rr = t.r + 24;
+      if (dx*dx + dy*dy + dz*dz < rr*rr){ plane.position.copy(before); onGroundCrash(v); groundSpeed *= 0.3; s = steps; break; }
+    }
+    for (let i = 0; i < buildingColliders.length; i++){   // buildings are solid too (story only)
+      const t = buildingColliders[i];
       const dx = plane.position.x - t.x, dy = plane.position.y - t.y, dz = plane.position.z - t.z;
       const rr = t.r + 24;
       if (dx*dx + dy*dy + dz*dz < rr*rr){ plane.position.copy(before); onGroundCrash(v); groundSpeed *= 0.3; s = steps; break; }
@@ -1248,7 +1256,7 @@ function buildBuildings(){
     buildingGroup.add(g);
     const c = dir.clone().multiplyScalar(gr + 40);
     buildings.push({ x: c.x, y: c.y, z: c.z, looted: false, lootType, marker });
-    treeColliders.push({ x: c.x, y: c.y, z: c.z, r: B_HALF });
+    buildingColliders.push({ x: c.x, y: c.y, z: c.z, r: B_HALF });
   }
 }
 function checkBuildingLoot(){
@@ -1387,6 +1395,7 @@ function startStory(){
   activeVehicle = 'plane'; weapon = 'none'; ammo = 0; playerHP = PLAYER_MAX_HP; groundSpeed = 0;
   materials = 0; removeHouse();
   if (!buildings.length) buildBuildings();
+  buildingGroup.visible = true;   // story houses visible again
   for (const b of buildings){ b.looted = false; if (b.marker) b.marker.visible = true; }   // restock loot
   despawnAllZombies(); refuelAndRepairAll();
   for (const b of bullets) bulletGroup.remove(b.mesh); bullets.length = 0;   // no stale tracers
@@ -1462,6 +1471,12 @@ function flyStep(dt){
     let hit = false;
     for (let i = 0; i < treeColliders.length; i++) {
       const t = treeColliders[i];
+      const dx = plane.position.x - t.x, dy = plane.position.y - t.y, dz = plane.position.z - t.z;
+      const rr = t.r + 30;
+      if (dx*dx + dy*dy + dz*dz < rr*rr) { plane.position.copy(before); gravVel = 0; hit = true; break; }
+    }
+    if (!hit && storyActive) for (let i = 0; i < buildingColliders.length; i++) {   // story buildings block the plane
+      const t = buildingColliders[i];
       const dx = plane.position.x - t.x, dy = plane.position.y - t.y, dz = plane.position.z - t.z;
       const rr = t.r + 30;
       if (dx*dx + dy*dy + dz*dz < rr*rr) { plane.position.copy(before); gravVel = 0; hit = true; break; }
