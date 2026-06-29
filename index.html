@@ -333,6 +333,7 @@ function updateSky(dt){
   _skyUp.copy(plane.position).normalize();
   skyMat.uniforms.up.value.copy(_skyUp);
   sky.position.copy(camera.position);
+  stars.position.copy(camera.position);   // keep stars concentric with the camera like the dome
 }
 
 // ---- The living planet ----
@@ -812,6 +813,7 @@ function showHUD(show){
 function exitStory(){
   storyActive = false; activeVehicle = 'plane'; groundSpeed = 0; materials = 0;
   despawnAllZombies(); removeHouse(); updateVehicleMesh();
+  for (const b of bullets) bulletGroup.remove(b.mesh); bullets.length = 0;   // flush in-flight tracers
   storyhudEl.classList.add('hidden'); $('gameover').classList.add('hidden');
   $('toast').classList.add('hidden'); uiEl.classList.remove('hidden');
   miniWrap.classList.add('hidden'); crosshairEl.classList.add('hidden');
@@ -1073,7 +1075,12 @@ function driveStep(dt){
 
   const up = plane.position.clone().sub(PLANET_CENTER).normalize();
   let fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
-  fwd.addScaledVector(up, -fwd.dot(up)).normalize();
+  fwd.addScaledVector(up, -fwd.dot(up));
+  if (fwd.lengthSq() < 1e-9) {                       // nose was near-radial — pick any tangent (avoid NaN)
+    fwd.set(1, 0, 0).addScaledVector(up, -up.x);
+    if (fwd.lengthSq() < 1e-9) fwd.set(0, 0, 1).addScaledVector(up, -up.z);
+  }
+  fwd.normalize();
   const frameMove = groundSpeed * 60 * dt;
   const steps = Math.min(60, Math.max(1, Math.ceil(Math.abs(frameMove) / 25)));
   for (let s = 0; s < steps; s++){
@@ -1313,13 +1320,18 @@ function updateMinimap(){
   const proj = (ox, oy, oz) => [ox*right.x + oy*right.y + oz*right.z, ox*fwd.x + oy*fwd.y + oz*fwd.z];
   if (house){
     const [mx, my] = proj(house.center.x - p.x, house.center.y - p.y, house.center.z - p.z);
-    const hx = cx + mx/range*rad, hy = cy - my/range*rad;
-    ctx.strokeStyle = 'rgba(70,220,130,0.5)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(hx, hy, Math.max(3, house.r/range*rad), 0, Math.PI*2); ctx.stroke();
-    ctx.fillStyle = '#39d36a'; ctx.fillRect(hx-3, hy-3, 6, 6);
+    const d = Math.hypot(mx, my) || 1;
+    const edge = d > range;
+    const hx = edge ? cx + mx*(rad-2)/d : cx + mx/range*rad;
+    const hy = edge ? cy - my*(rad-2)/d : cy - my/range*rad;
+    if (!edge){   // only draw the safe-zone ring when home is actually on the radar
+      ctx.strokeStyle = 'rgba(70,220,130,0.5)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(hx, hy, Math.max(3, house.r/range*rad), 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.fillStyle = '#39d36a'; ctx.fillRect(hx-3, hy-3, 6, 6);   // home marker, clamped to rim if far
   }
   for (const b of buildings){
-    if (b.looted) continue;
+    if (b.looted || b.lootType === LOOT_EMPTY) continue;   // only beacon real loot, matching the world markers
     const [mx, my] = proj(b.x - p.x, b.y - p.y, b.z - p.z);
     if (Math.hypot(mx, my) > range) continue;
     ctx.fillStyle = '#' + lootColor(b.lootType).toString(16).padStart(6, '0');
@@ -1377,12 +1389,13 @@ function startStory(){
   if (!buildings.length) buildBuildings();
   for (const b of buildings){ b.looted = false; if (b.marker) b.marker.visible = true; }   // restock loot
   despawnAllZombies(); refuelAndRepairAll();
+  for (const b of bullets) bulletGroup.remove(b.mesh); bullets.length = 0;   // no stale tracers
   plane.quaternion.identity();
   plane.position.copy(UP).multiplyScalar(groundRadius(UP) + 1400);
   speed = 1.4; gravVel = 0; updateVehicleMesh();
   lobbyEl.classList.add('hidden'); finishEl.classList.add('hidden'); mazehudEl.classList.add('hidden'); $('gameover').classList.add('hidden');
-  uiEl.classList.add('hidden'); speedctlEl.classList.add('hidden');
   storyhudEl.classList.remove('hidden'); miniWrap.classList.remove('hidden'); showHUD(true);
+  uiEl.classList.add('hidden'); speedctlEl.classList.add('hidden');   // hide plane-only controls AFTER showHUD re-enables them
   paused = false; updateStoryHUD();
   toast('Day 1 — fly while you can. Night is coming.');
 }
@@ -1392,7 +1405,7 @@ function gameOver(){
   const best = Math.max(getStoryBest(), dayCount);
   localStorage.setItem('pg_story_best', String(best));
   $('goSub').textContent = 'You survived to Day ' + dayCount + '.   Best: Day ' + best + '.';
-  storyhudEl.classList.add('hidden');
+  storyhudEl.classList.add('hidden'); crosshairEl.classList.add('hidden'); miniWrap.classList.add('hidden');
   $('gameover').classList.remove('hidden');
 }
 $('btnStory').addEventListener('click', startStory);
@@ -1419,10 +1432,11 @@ function flyStep(dt){
       plane.quaternion.premultiply(lvl);
     }
   }
+  const outOfGas = storyActive && activeVehicle === 'plane' && fuel.plane <= 0;
   const throttleRate = 6 + speed * 1.2;
-  if (keys['ArrowUp'])   speed = Math.min(maxSpeed, speed + throttleRate*dt);
-  if (keys['ArrowDown']) speed = Math.max(minSpeed, speed - throttleRate*dt);
-  if (storyActive && activeVehicle === 'plane' && fuel.plane <= 0) speed = Math.max(minSpeed, speed - 8*dt); // stall
+  if (keys['ArrowUp'] && !outOfGas) speed = Math.min(maxSpeed, speed + throttleRate*dt);
+  if (keys['ArrowDown'])            speed = Math.max(minSpeed, speed - throttleRate*dt);
+  if (outOfGas) speed = Math.max(minSpeed, speed - 8*dt); // empty tank → coast/stall, throttle can't override
   const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(plane.quaternion);
   const frameMove = speed * 60 * dt;
   const steps = Math.min(120, Math.max(1, Math.ceil(frameMove / 25)));
